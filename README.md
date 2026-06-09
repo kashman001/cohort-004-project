@@ -16,7 +16,7 @@ This is a full-stack course platform (think a mini Udemy) built with React Route
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v22+
-- [pnpm](https://pnpm.io/) v9+ (enabled via `corepack enable`)
+- [pnpm](https://pnpm.io/) v11+ (enabled via `corepack enable`)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI installed
 - A Claude Pro or Max subscription
 
