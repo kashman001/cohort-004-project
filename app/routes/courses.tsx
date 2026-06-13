@@ -9,9 +9,11 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { AlertTriangle, BookOpen, Search } from "lucide-react";
 import { CourseImage } from "~/components/course-image";
 import { UserAvatar } from "~/components/user-avatar";
+import { StarRating } from "~/components/star-rating";
 import { getCurrentUserId } from "~/lib/session";
 import { formatPrice } from "~/lib/utils";
 import { getUserEnrolledCourses } from "~/services/enrollmentService";
+import { getRatingSummariesForCourses } from "~/services/ratingService";
 import { calculateProgress, getCompletedLessonCount } from "~/services/progressService";
 import { resolveCountry } from "~/lib/country.server";
 import { calculatePppPrice } from "~/lib/ppp";
@@ -35,6 +37,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     "newest",
     50,
     0
+  );
+
+  const ratingSummaries = getRatingSummariesForCourses(
+    courses.map((c) => c.id)
   );
 
   const currentUserId = await getCurrentUserId(request);
@@ -66,6 +72,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       progress: userProgress?.progress ?? null,
       completedLessons: userProgress?.completedLessons ?? null,
       pppPrice,
+      rating: ratingSummaries.get(course.id) ?? { average: null, count: 0 },
     };
   });
 
@@ -209,6 +216,12 @@ export default function CourseCatalog({ loaderData }: Route.ComponentProps) {
                   <p className="line-clamp-2 text-sm text-muted-foreground">
                     {course.description}
                   </p>
+                </CardContent>
+                <CardContent className="pt-0">
+                  <StarRating
+                    average={course.rating.average}
+                    count={course.rating.count}
+                  />
                 </CardContent>
                 {course.progress !== null && course.progress > 0 && (
                   <CardContent className="pt-0">
