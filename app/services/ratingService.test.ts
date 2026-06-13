@@ -13,7 +13,12 @@ vi.mock("~/db", () => ({
 }));
 
 // Import after the mock so the module picks up our test db
-import { submitRating, getUserRating } from "./ratingService";
+import {
+  submitRating,
+  getUserRating,
+  getCourseRatingSummary,
+  getRatingSummariesForCourses,
+} from "./ratingService";
 
 function enroll(userId: number, courseId: number) {
   testDb
@@ -94,6 +99,89 @@ describe("ratingService", () => {
 
     it("returns null when the user has not rated", () => {
       expect(getUserRating(base.user.id, base.course.id)).toBeNull();
+    });
+  });
+
+  function makeUser(email: string) {
+    return testDb
+      .insert(schema.users)
+      .values({ name: email, email, role: schema.UserRole.Student })
+      .returning()
+      .get();
+  }
+
+  function makeCourse(slug: string) {
+    return testDb
+      .insert(schema.courses)
+      .values({
+        title: slug,
+        slug,
+        description: "x",
+        instructorId: base.instructor.id,
+        categoryId: base.category.id,
+        status: schema.CourseStatus.Published,
+      })
+      .returning()
+      .get();
+  }
+
+  describe("getCourseRatingSummary", () => {
+    it("returns the average and count of ratings", () => {
+      const u2 = makeUser("u2@example.com");
+      enroll(base.user.id, base.course.id);
+      enroll(u2.id, base.course.id);
+
+      submitRating(base.user.id, base.course.id, 5);
+      submitRating(u2.id, base.course.id, 4);
+
+      const summary = getCourseRatingSummary(base.course.id);
+      expect(summary.count).toBe(2);
+      expect(summary.average).toBeCloseTo(4.5);
+    });
+
+    it("returns null average and 0 count when there are no ratings", () => {
+      const summary = getCourseRatingSummary(base.course.id);
+      expect(summary.average).toBeNull();
+      expect(summary.count).toBe(0);
+    });
+  });
+
+  describe("getRatingSummariesForCourses", () => {
+    it("groups summaries by course in one query", () => {
+      const course2 = makeCourse("course-2");
+      const u2 = makeUser("u2b@example.com");
+
+      enroll(base.user.id, base.course.id);
+      enroll(u2.id, base.course.id);
+      enroll(base.user.id, course2.id);
+
+      submitRating(base.user.id, base.course.id, 4);
+      submitRating(u2.id, base.course.id, 2);
+      submitRating(base.user.id, course2.id, 5);
+
+      const map = getRatingSummariesForCourses([base.course.id, course2.id]);
+
+      expect(map.get(base.course.id)!.count).toBe(2);
+      expect(map.get(base.course.id)!.average).toBeCloseTo(3);
+      expect(map.get(course2.id)!.count).toBe(1);
+      expect(map.get(course2.id)!.average).toBeCloseTo(5);
+    });
+
+    it("omits courses that have no ratings", () => {
+      const course2 = makeCourse("course-no-ratings");
+
+      enroll(base.user.id, base.course.id);
+      submitRating(base.user.id, base.course.id, 4);
+
+      const map = getRatingSummariesForCourses([base.course.id, course2.id]);
+
+      expect(map.has(base.course.id)).toBe(true);
+      expect(map.has(course2.id)).toBe(false);
+    });
+
+    it("returns an empty map for an empty id list", () => {
+      const map = getRatingSummariesForCourses([]);
+      expect(map.size).toBe(0);
     });
   });
 });
