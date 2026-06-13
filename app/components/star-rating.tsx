@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import { Star } from "lucide-react";
+import { useFetcher } from "react-router";
+import { toast } from "sonner";
 import { cn } from "~/lib/utils";
 
 type StarRatingProps = {
@@ -56,4 +59,63 @@ function StarIcon({ fill }: { fill: number }) {
     );
   }
   return <Star className="size-4 text-muted-foreground/40" />;
+}
+
+type StarRatingInputProps = {
+  currentRating: number | null;
+};
+
+// Interactive 1–5 star input for enrolled students. Submits to the current
+// route's action via a fetcher (no navigation); the loader revalidates so the
+// average refreshes. Pre-selects the user's existing rating; previews on hover.
+// Shows a toast on the action result.
+export function StarRatingInput({ currentRating }: StarRatingInputProps) {
+  const fetcher = useFetcher();
+  const [hover, setHover] = useState<number | null>(null);
+
+  // While submitting, optimistically show the value being sent.
+  const pending = fetcher.formData?.get("stars");
+  const submitted = pending ? Number(pending) : null;
+  const active = hover ?? submitted ?? currentRating ?? 0;
+
+  const result = fetcher.data as { ok: boolean; error?: string } | undefined;
+  useEffect(() => {
+    if (fetcher.state === "idle" && result) {
+      if (result.ok) toast.success("Thanks for rating!");
+      else if (result.error) toast.error(result.error);
+    }
+  }, [fetcher.state, result]);
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-sm font-medium">Your rating</p>
+      <fetcher.Form
+        method="post"
+        className="flex items-center gap-1"
+        role="group"
+        aria-label="Rate this course"
+      >
+        {[1, 2, 3, 4, 5].map((value) => (
+          <button
+            key={value}
+            type="submit"
+            name="stars"
+            value={value}
+            aria-label={`Rate ${value} star${value === 1 ? "" : "s"}`}
+            onMouseEnter={() => setHover(value)}
+            onMouseLeave={() => setHover(null)}
+            className="rounded p-0.5 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Star
+              className={
+                value <= active
+                  ? "size-6 fill-yellow-400 text-yellow-400"
+                  : "size-6 text-muted-foreground/40"
+              }
+            />
+          </button>
+        ))}
+      </fetcher.Form>
+    </div>
+  );
 }
