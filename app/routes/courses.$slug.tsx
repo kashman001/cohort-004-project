@@ -9,6 +9,11 @@ import {
 } from "~/services/courseService";
 import { isUserEnrolled } from "~/services/enrollmentService";
 import {
+  getCourseRatingSummary,
+  getUserRating,
+  submitRating,
+} from "~/services/ratingService";
+import {
   calculateProgress,
   getLessonProgressForCourse,
   getNextIncompleteLesson,
@@ -37,6 +42,7 @@ import {
 } from "lucide-react";
 import { CourseImage } from "~/components/course-image";
 import { UserAvatar } from "~/components/user-avatar";
+import { StarRating, StarRatingInput } from "~/components/star-rating";
 import { data, isRouteErrorResponse } from "react-router";
 import { formatDuration, formatPrice } from "~/lib/utils";
 import { renderMarkdown } from "~/lib/markdown.server";
@@ -91,6 +97,12 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     }
   }
 
+  const ratingSummary = getCourseRatingSummary(course.id);
+  const userRating =
+    currentUserId && enrolled
+      ? getUserRating(currentUserId, course.id)
+      : null;
+
   // Render sales copy from Markdown to HTML server-side
   const salesCopyHtml = courseWithDetails.salesCopy
     ? await renderMarkdown(courseWithDetails.salesCopy)
@@ -113,10 +125,34 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     currentUserId,
     pppPrice,
     tierInfo,
+    ratingSummary,
+    userRating,
   };
 }
 
-// No action — enrollment is handled via the purchase confirmation page
+export async function action({ params, request }: Route.ActionArgs) {
+  const currentUserId = await getCurrentUserId(request);
+  if (!currentUserId) {
+    return data({ ok: false, error: "You must be signed in." }, { status: 401 });
+  }
+
+  const course = getCourseBySlug(params.slug);
+  if (!course) {
+    throw data("Course not found", { status: 404 });
+  }
+
+  const formData = await request.formData();
+  const stars = Number(formData.get("stars"));
+
+  try {
+    submitRating(currentUserId, course.id, stars);
+    return data({ ok: true });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Could not save rating.";
+    return data({ ok: false, error: message }, { status: 400 });
+  }
+}
 
 export function HydrateFallback() {
   return (
@@ -181,6 +217,8 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
     currentUserId,
     pppPrice,
     tierInfo,
+    ratingSummary,
+    userRating,
   } = loaderData;
   const isInstructor = currentUserId === course.instructorId;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -302,6 +340,10 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
           {course.description}
         </p>
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <StarRating
+            average={ratingSummary.average}
+            count={ratingSummary.count}
+          />
           <span className="flex items-center gap-1.5">
             <UserAvatar
               name={course.instructorName}
@@ -389,6 +431,9 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
                       className="h-full rounded-full bg-primary transition-all"
                       style={{ width: `${progress}%` }}
                     />
+                  </div>
+                  <div className="border-t pt-4">
+                    <StarRatingInput currentRating={userRating} />
                   </div>
                   {course.modules.length > 0 &&
                     (() => {
